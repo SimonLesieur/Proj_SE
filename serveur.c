@@ -77,6 +77,7 @@ int main()
 	{
 	for (int i = 0; i<connectedClient; i++)
 	  {
+	    printf("buffer=%s\n", buffer);
 	    exit_if((write(fileDescClient[i], buffer, strlen(buffer) + 1) == -1), "write");
 	
 	  }

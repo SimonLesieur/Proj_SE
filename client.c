@@ -42,9 +42,6 @@ int main()
     // mkfifo(<pathname>, <permission>)
     exit_if((mkfifo(myfifo, 0777) == -1), "mkfifo");
     printf("mkfifo %s\n", myfifo);
-    fd = open(myfifo, O_RDONLY | O_NONBLOCK);
-    printf("open\n");
-    exit_if((fd == -1), "open fd");
 
 
     int filDescServ = open("/tmp/chat/0", O_WRONLY);
@@ -52,26 +49,39 @@ int main()
 
     exit_if((write(filDescServ, myfifo, strlen(myfifo)+1) == -1), "write");
 
-    char arr1[80], arr2[80];
 
+    fd = open(myfifo, O_RDONLY);
+    printf("open\n");
+    exit_if((fd == -1), "open fd");
 
+    char str_Recept[80], str_Envoi[80];
+
+    int pid_t = fork();
 
     while (1)
-    {
-      printf("Ecrit un truc : ");
-      exit_if((fgets(arr2, 100, stdin) == NULL),"fgets");
+      {
+	switch(pid_t)
+	  {
+	  case -1:
+	    perror("fork");
+	    exit(EXIT_FAILURE);
+	    break;
 
-      printf("J'envoie : %s\n", arr2);
-      exit_if((write(filDescServ, arr2, strlen(arr2)+1) == -1), "write");
+	  case 0:
+	    printf("Ecris ton message : \n");
+	    exit_if((fgets(str_Envoi, 100, stdin) == NULL),"fgets");
+	    exit_if((write(filDescServ, str_Envoi, strlen(str_Envoi)+1) == -1), "write");
+	    break;
 
-      exit_if(((read(fd, arr1, sizeof(arr1)) == -1) && (errno != EAGAIN)),"read");
+	  default:
 
-      printf("Serveur send: %s\n", arr1);
-
-      arr1[0] = '\0';
-
-
-    }
+	    exit_if(((read(fd, str_Recept, sizeof(str_Recept)) == -1) && (errno != EAGAIN)),"read");
+	  
+	    printf("Le serveur a envoyé : %s\n", str_Recept);
+	    break;
+	  }
+	str_Recept[0] = '\0';
+      }
     return 0;
 }
 
