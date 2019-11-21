@@ -31,8 +31,6 @@ void handle_sigint(int sig)
 
 
 
-
-
 int main()
 {
   struct clientId clientTab[10];           //tableau de fileDescripteur des clients
@@ -137,6 +135,7 @@ int main()
 		if( strcmp(clientTab[i].file, dataR1) != 0)
 		  {
 		    printf("j'envoie à %s",clientTab[i].name);
+
 		    exit_if((write(clientTab[i].pid, bufferS, strlen(bufferS)+1) == -1),"write");
 		  }
 	      }

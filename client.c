@@ -47,14 +47,31 @@ int main()
     int filDescServ = open("/tmp/chat/0", O_WRONLY);
     exit_if((filDescServ == -1), "open fileDescServ");
 
-    exit_if((write(filDescServ, myfifo, strlen(myfifo)+1) == -1), "write");
 
 
-    fd = open(myfifo, O_RDONLY);
-    printf("open\n");
+
+//---------------------ID CLIENT-----------------------
+    char nameClient[15];
+    printf("Entrer votre nom d'utilisateur:");
+    exit_if((fgets(nameClient, 15, stdin) == NULL),"fgets");
+
+    char idClient[30]= "/i";
+    strcat(idClient,";");
+    strcat(idClient,myfifo);
+    strcat(idClient,";");
+    strcat(idClient,nameClient);
+    exit_if((write(filDescServ, idClient, strlen(idClient)+1) == -1), "write");   //envoit l'identité
+//-------------------ID CLIENT-----------------------
+
+   fd = open(myfifo, O_RDONLY);
     exit_if((fd == -1), "open fd");
 
+
     char str_Recept[80], str_Envoi[80];
+
+   char buffOfText[80];
+    char buff2Send[100];
+
 
     int pid_t = fork();
 
@@ -69,8 +86,14 @@ int main()
 
 	  case 0:
 	    printf("Ecris ton message : \n");
-	    exit_if((fgets(str_Envoi, 100, stdin) == NULL),"fgets");
-	    exit_if((write(filDescServ, str_Envoi, strlen(str_Envoi)+1) == -1), "write");
+	    exit_if((fgets(buffOfText, 80, stdin) == NULL),"fgets");
+ 
+	    strcpy(buff2Send,"/m;");
+	    strcat(buff2Send,myfifo);
+	    strcat(buff2Send,";");
+	    strcat(buff2Send,buffOfText);
+
+	    exit_if((write(filDescServ, buff2Send, strlen(buff2Send)+1) == -1), "write");
 	    break;
 
 	  default:
@@ -84,69 +107,3 @@ int main()
       }
     return 0;
 }
-
-
-//Dans while 1
-     //   // Open FIFO for write only
-      //   fd = open(myfifo, O_WRONLY);
-      //   exit_if((fd == -1),"open");
-      //
-      //
-      //   // Take an input arr2ing from user.
-      //   // 80 is maximum length
-      //   exit_if((fgets(arr2, 80, stdin) == NULL),"fgets");
-      //
-      //   // Write the input arr2ing on FIFO
-      //   // and close it
-      // exit_if((write(fd, arr2, strlen(arr2)+1) == -1), "write");
-      //
-      //   exit_if((close(fd)==-1),"close");
-      //
-      //   // Open FIFO for Read only
-      //   fd = open(myfifo, O_RDONLY);
-      //   exit_if((fd == -1),"open");
-      //
-      //   // Read from FIFO
-      //   exit_if((read(fd, arr1, sizeof(arr1)) == -1),"read");
-      //
-      //
-      //   // Print the read message
-      //   printf("User2: %s\n", arr1);
-      //   exit_if((close(fd)==-1),"close");
-
-
-
-
-
-
-
-// #include <stdio.h>
-//
-// #include <unistd.h>
-// #include <fcntl.h>
-// #include <errno.h>
-//
-// #include "utils.h"
-//
-// #define FIFO_PATH "/tmp/ex-fifo"
-//
-//
-//
-// int main(int argc, char *argv[])
-// {
-//     const char *fname = (argc < 2) ? FIFO_PATH : argv[1];
-//     exit_if(mkfifo(fname, 0666) == -1 && errno != EEXIST, fname);
-//
-//     int fd = open(fname, O_WRONLY);
-//     exit_if(fd == -1, fname);
-//
-//     printf("file %s is open for write\n", fname);
-//     char buffer[100];
-//     int n = snprintf(buffer, sizeof(buffer),
-//             "I'm the child %d, of %d\n", getpid(), getppid());
-//     write(fd, buffer, n);
-//     printf("end of writer\n");
-//     return 0;
-// }
-//
-//
