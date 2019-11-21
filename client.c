@@ -26,20 +26,17 @@ void handle_sigint(int sig)
 
 int main()
 {
-
     int pid = getpid();
-    char strPid[7] = {0}; // a mieux faire
+    char strPid[7] = {0};        // a mieux faire
     sprintf(strPid, "%d", pid);
-    // FIFO file path
-    // char myfifo[strlen(PATH) + strlen(strPid) + 1];
+
+
     strcpy(myfifo, PATH);
     strcat(myfifo, strPid);
-
-    printf("%s\n", myfifo);
-
+    printf("je suis le client : %s\n", myfifo);
 
     signal(SIGINT, handle_sigint);
-    printf("signal\n");
+
 
     // Creating the named file(FIFO)
     // mkfifo(<pathname>, <permission>)
@@ -50,27 +47,37 @@ int main()
     exit_if((fd == -1), "open fd");
 
 
-    int fdServ = open("/tmp/chat/0", O_WRONLY);
-    exit_if((fdServ == -1), "open fdServ");
+    int filDescServ = open("/tmp/chat/0", O_WRONLY);
+    exit_if((filDescServ == -1), "open fileDescServ");
 
-    exit_if((write(fdServ, myfifo, strlen(myfifo)+1) == -1), "write");
+    exit_if((write(filDescServ, myfifo, strlen(myfifo)+1) == -1), "write");
 
     char arr1[80], arr2[80];
 
-    // exit_if((fgets(arr2, 80, stdin) == NULL),"fgets");
-    // exit_if((write(fdServ, arr2, strlen(arr2)+1) == -1), "write");
+
 
     while (1)
     {
-      printf("Ecrit un truc : \n");
-      exit_if((fgets(arr2, 80, stdin) == NULL),"fgets");
-      printf("Mess envoi : %s\n", arr2);
-      exit_if((write(fdServ, arr2, strlen(arr2)+1) == -1), "write");
+      printf("Ecrit un truc : ");
+      exit_if((fgets(arr2, 100, stdin) == NULL),"fgets");
+
+      printf("J'envoie : %s\n", arr2);
+      exit_if((write(filDescServ, arr2, strlen(arr2)+1) == -1), "write");
 
       exit_if(((read(fd, arr1, sizeof(arr1)) == -1) && (errno != EAGAIN)),"read");
-      printf("User2: %s\n", arr1);
+
+      printf("Serveur send: %s\n", arr1);
+
       arr1[0] = '\0';
-      //   // Open FIFO for write only
+
+
+    }
+    return 0;
+}
+
+
+//Dans while 1
+     //   // Open FIFO for write only
       //   fd = open(myfifo, O_WRONLY);
       //   exit_if((fd == -1),"open");
       //
@@ -96,11 +103,6 @@ int main()
       //   // Print the read message
       //   printf("User2: %s\n", arr1);
       //   exit_if((close(fd)==-1),"close");
-
-    }
-    return 0;
-}
-
 
 
 

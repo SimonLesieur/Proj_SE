@@ -8,92 +8,97 @@
 #include "utils.h"
 
 #define TAILLE_MESSAGE	256
-#define PATH						"/tmp/chat/"
+#define PATH	"/tmp/chat/"
 
 int fd;
 char myfifo[50];
 
+
+
 void handle_sigint(int sig)
 {
-    printf("Caught signal %d\n", sig);
-    close(fd);
-    remove(myfifo);
-    exit(0);
+  printf("Caught signal %d\n", sig);
+  close(fd);
+  remove(myfifo);
+  exit(0);
 }
+
 
 
 int main()
 {
-    // int fd;
-		int fdClient[10];
-		int connectedClient = 0;
-    // FIFO file path
-    // char * myfifo = PATH "0";
-		strcpy(myfifo, PATH);
-		strcat(myfifo, "0");
+  int fileDescClient[10]; //tableau de fileDescripteur des clients
+  int connectedClient = 0;//Nb de client connecté
 
-		mkdir(PATH, 0777);	// avec test système ça serait mieux
 
-    // Creating the named file(FIFO)
-    // mkfifo(<pathname>,<permission>)
+  //je mets PATH dans myfifo et on ajoute un 0
+  strcpy(myfifo, PATH);
+  strcat(myfifo, "0");
 
-		signal(SIGINT, handle_sigint);
+  //on creer le fichier pour la fifo ( avec test système ça serait mieux)
+  mkdir(PATH, 0777);
 
-    exit_if((mkfifo(myfifo, 0666) == -1), "mkfifo");
-		fd = open(myfifo,O_RDONLY);
-		exit_if((fd == -1), "open");
+  // Creating the named file(FIFO)
+  // mkfifo(<pathname>,<permission>)
 
-    char str1[80], str2[80];
-    while (1)
+  signal(SIGINT, handle_sigint);
+
+  //je crée la fifo et si erreur exit
+  exit_if((mkfifo(myfifo, 0666) == -1), "mkfifo");
+
+  //j'ouvre le fichier myfifo et si erreur exit
+  fd = open(myfifo,O_RDONLY);
+  exit_if((fd == -1), "open");
+
+
+
+
+  char buffer[100];
+
+  while(1)
     {
-        // // First open in read only and read
-        // fd1 = open(myfifo,O_RDONLY);
-				// exit_if((fd1 == -1), "open");
-				//
-        exit_if((read(fd, str1, 80)==-1),"read");
+    
 
-        // Print the read string and close
-        printf("User1: %s\n", str1);
+      exit_if((read(fd, buffer,100)==-1),"read");          //je lis et exit si erreur
 
-				if (str1[0] == '/')
-				{
-					fdClient[connectedClient] = open(str1,O_WRONLY);
-					exit_if((fdClient[connectedClient] == -1), "open");
-					exit_if((write(fdClient[connectedClient], "Bienvenue", strlen("Bienvenue") + 1) == -1), "write");
-					connectedClient++;
-				}
-				else
-					for (int i = 0; i<connectedClient; i++)
-						exit_if((write(fdClient[i], str1, strlen(str1) + 1) == -1), "write");
+      printf("serveur à reçu du client N : %s\n", buffer);   // Print the read string
 
 
-			  // exit_if((close(fd1) == -1),"close");
-				//
-        // // Now open in write mode and write
-        // // string taken from user.
-        // fd1 = open(myfifo,O_WRONLY);
-				// exit_if((fd1 == -1), "open");
-				//
-        // exit_if((fgets(str2, 80, stdin) == NULL),"fgets");
-        // exit_if((write(fd1, str2, strlen(str2)+1) == -1),"write");
-        // exit_if((close(fd1) == -1),"close");
+      if (buffer[0] == '/')            //si /-> nouveau client
+	{
+	  fileDescClient[connectedClient] = open(buffer,O_WRONLY);
+
+	  exit_if((fileDescClient[connectedClient] == -1), "open");
+
+	  exit_if((write(fileDescClient[connectedClient], "Bienvenue", strlen("Bienvenue") + 1) == -1), "write");
+	  connectedClient++;
+	}
+      else                               //sinon msg normal je renvoie a tous le monde
+	{
+	for (int i = 0; i<connectedClient; i++)
+	  {
+	    exit_if((write(fileDescClient[i], buffer, strlen(buffer) + 1) == -1), "write");
+	
+	  }
+	}
+
     }
-    return 0;
+  return 0;
 }
 
 
 
-
-
-
-
-
-
-
-
-
-
-
+//  dans le while 1
+      // exit_if((close(fd1) == -1),"close");
+      //
+      // // Now open in write mode and write
+      // // string taken from user.
+      // fd1 = open(myfifo,O_WRONLY);
+      // exit_if((fd1 == -1), "open");
+      //
+      // exit_if((fgets(str2, 80, stdin) == NULL),"fgets");
+      // exit_if((write(fd1, str2, strlen(str2)+1) == -1),"write");
+      // exit_if((close(fd1) == -1),"close");
 
 
 
