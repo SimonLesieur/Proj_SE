@@ -16,6 +16,29 @@
 int fd;
 char myfifo[50];
 
+int GetServ(void) {
+  int File_Desc = open("/tmp/chat/0", O_WRONLY);
+  if (File_Desc == -1) {
+      switch (fork()) {
+      case -1 :
+	perror("fork");
+	return EXIT_FAILURE;
+	break;
+
+      case 0:
+	exit_if(execl("./serveur",NULL)==-1,"exec");
+	File_Desc = open("/tmp/chat/0", O_WRONLY);
+	exit_if(File_Desc == -1, "open File_Desc");
+	return File_Desc;
+	break;
+      }
+    }
+  else {
+      return File_Desc;
+  }
+}
+
+
 void handle_sigint(int sig)
 {
     printf("Caught signal %d\n", sig);
@@ -24,10 +47,11 @@ void handle_sigint(int sig)
     exit(0);
 }
 
-int main()
-{
+int main(int argc, char *argv[]) {
+
     int pid = getpid();
-    char strPid[7] = {0};        // a mieux faire
+    int filDescServ;
+    char strPid[7] = {0};        // à mieux faire
     sprintf(strPid, "%d", pid);
 
 
@@ -43,16 +67,46 @@ int main()
     exit_if((mkfifo(myfifo, 0777) == -1), "mkfifo");
     printf("mkfifo %s\n", myfifo);
 
+    
+    filDescServ = GetServ();
 
-    int filDescServ = open("/tmp/chat/0", O_WRONLY);
-    exit_if((filDescServ == -1), "open fileDescServ");
+    //  int filDescServ = open("/tmp/chat/0", O_WRONLY);
+    //  exit_if((filDescServ == -1), "open fileDescServ");
+
+
+  filDescServ = open("/tmp/chat/0", O_WRONLY);
+  if (filDescServ == -1) {
+      switch (fork()) {
+      case -1 :
+	perror("fork");
+	break;
+
+      case 0:
+	exit_if(execl("./serveur",NULL)==-1,"exec");
+	filDescServ = open("/tmp/chat/0", O_WRONLY);
+
+	break;
+      }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
 
 //---------------------ID CLIENT-----------------------
     char nameClient[15];
-    printf("Entrer votre nom d'utilisateur:");
+    printf("Entrez votre nom d'utilisateur:");
     exit_if((fgets(nameClient, 15, stdin) == NULL),"fgets");
 
     char idClient[30]= "/i";
@@ -69,7 +123,7 @@ int main()
 
     char str_Recept[80], str_Envoi[80];
 
-   char buffOfText[80];
+    char buffOfText[80];
     char buff2Send[100];
 
 
