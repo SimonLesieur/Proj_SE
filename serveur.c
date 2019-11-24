@@ -7,11 +7,13 @@
 #include <unistd.h>
 #include "utils.h"
 
-#define TAILLE_MESSAGE	256
-#define PATH	"/tmp/chat/"
+#define NB_MAX_CLIENT 10
 
-int fd;
-char myfifo[50];
+
+int  fileDescServ;
+char pathServerFile[20] = "/tmp/chat/";
+char pathServerPipe[12] = "/tmp/chat/0";
+
 
 struct clientId{
   char name[20];
@@ -19,205 +21,148 @@ struct clientId{
   int pid;
 };
 
+struct clientId clientTab[NB_MAX_CLIENT]; //tableau de fileDescripteur des clients
+int nbOfClient = 0;                       //Nb de client connecté
+
+
+
+//-------gestion des CTRLC et fermeture client-------
 void handle_sigint(int sig)
 {
   printf("Caught signal %d\n", sig);
-  close(fd);
-  remove(myfifo);
+  for(int i = 0 ; i<nbOfClient ; i++){
+    printf("je tue :%s\ns",clientTab[i].name);
+    exit_if((write(clientTab[i].pid, "/c", strlen("/c")+1) == -1),"write");}
+  close(fileDescServ);
+  system( "rm -rf /tmp/chat/" );
   exit(0);
 }
 
-
-
-
+//---------Identification du client émetteur et retour de son numéro id----------
+int clientIdentifier(char dataR1[100],struct clientId clientTab[NB_MAX_CLIENT],int nbOfClient)
+{
+  for(int i = 0 ; i<nbOfClient ; i++){
+    if( strcmp(clientTab[i].file, dataR1) == 0)
+      return i;}
+}
 
 
 
 int main()
 {
-  struct clientId clientTab[10];           //tableau de fileDescripteur des clients
-  int nbOfClient = 0;//Nb de client connecté
-
-
-  //je mets PATH dans myfifo et on ajoute un 0
-  strcpy(myfifo, PATH);
-  strcat(myfifo, "0");
-
-  //on creer le fichier pour la fifo ( avec test système ça serait mieux)
-  mkdir(PATH, 0777);
-
-  // Creating the named file(FIFO)
-  // mkfifo(<pathname>,<permission>)
-
+  system( "rm -rf /tmp/chat/" );
   signal(SIGINT, handle_sigint);
 
-  //je crée la fifo et si erreur exit
-  exit_if((mkfifo(myfifo, 0666) == -1), "mkfifo");
+  mkdir(pathServerFile, 0777);                              //on crée le fichier pour la fifo
+  exit_if((mkfifo(pathServerPipe, 0666) == -1), "mkfifo");  //on crée le pipe serv
+  fileDescServ = open(pathServerPipe,O_RDONLY);             //on ouvre le pipe serv
+  exit_if((fileDescServ == -1), "open");
 
-  //j'ouvre le fichier myfifo et si erreur exit
-  fd = open(myfifo,O_RDONLY);
-  exit_if((fd == -1), "open");
+  printf("j'ai bien démarré\n");
 
+  int  currentClientId;
   char dataR1[100];
   char dataR2[100];
   char bufferR[100];
   char bufferS[100];
 
   while(1)
+  {
+    for(int i =0 ; i<100; i++) { bufferR[i]=0;  bufferS[i]=0;}  //RESET BUFFER
+
+    exit_if((read(fileDescServ, bufferR,100)==-1),"read");      //on lit et exit si erreur
+    printf("\n~~~~~~RECV CLIENT: %s", bufferR);                 //Print the read string
+
+    if (bufferR[0] == '/')                                      // si "/"" -> consigne
     {
-      for(int i =0 ; i<100; i++){
-	bufferR[i]=0;
-	bufferS[i]=0;}
+      printf("++++++CONS ");
 
-      exit_if((read(fd, bufferR,100)==-1),"read");          //je lis et exit si erreur
+      //-------------ISOLATION DES DIFFERENTS PARAMETRES-------------
+      int j = 0;
+      int k = 0;
+      for(int i = 3; i<100; i++){
+        if(bufferR[i] == ';'){ j=1; k=0;}
+        else{
+          if(j==0) dataR1[k] = bufferR[i];
+          else     dataR2[k] = bufferR[i];
+          k++;}}
+      //-------------ISOLATION DES DIFFERENTS PARAMETRES-------------
 
-      printf("-------------------------------------\nSercRECEP :%s-------------------------------------------\n", bufferR);   // Print the read string
+      currentClientId = clientIdentifier(dataR1,clientTab,nbOfClient);
 
-      
-      if (bufferR[0] == '/')            //si / -> consigneeeeee
-	{
-	  printf("je reçois une consigne  ");
+      //-------------CONSIGNE IDENTIFICATION------------------
+      if(bufferR[1]=='i')
+      {
+        if(NB_MAX_CLIENT > nbOfClient){
+        printf("IDENTIFIER++++++\n");
 
-	  if(nbOfClient == 9)
-	    printf("ERREUR trop de client");
-
-	  int j = 0;
-	  int k = 0;
-	  for(int i = 3; i<100; i++){ 
-	    if(bufferR[i] == ';'){
-	      j=1;
-	      k=0;}
-	    else{
-	      if(j==0)
-		dataR1[k] = bufferR[i];
-	      else
-		dataR2[k] = bufferR[i];	
-	      k++;}
-	  }
+        strcpy(clientTab[nbOfClient].file,dataR1);
+        strcpy(clientTab[nbOfClient].name,dataR2);
+        size_t ln = strlen(clientTab[nbOfClient].name) - 1;
+        if (clientTab[nbOfClient].name[ln] == '\n')  clientTab[nbOfClient].name[ln] = '\0';
 
 
+        clientTab[nbOfClient].pid = open(clientTab[nbOfClient].file,O_WRONLY);
+        exit_if((clientTab[nbOfClient].pid == -1), "open");
 
-	  if(bufferR[1]=='i')          //si i -> identité
-	    {
-	      printf("d'identification\r\n");
+        strcpy(bufferS,"bienvenue ");
+        strcat(bufferS,clientTab[nbOfClient].name);
+        strcat(bufferS,"\n");
+        exit_if((write(clientTab[nbOfClient].pid, bufferS, strlen(bufferS) + 1) == -1), "write");
+        nbOfClient++;}
+        else{
+        strcpy(bufferS,"Déja trop de client essayez plus tard...\n");
+        exit_if((write(clientTab[currentClientId].pid, bufferS, strlen(bufferS) + 1) == -1), "write");}
+      }
 
-	      strcpy(clientTab[nbOfClient].file,dataR1);
-	      strcpy(clientTab[nbOfClient].name,dataR2);
+      //-------------CONSIGNE REPERTOIRE------------------
+      else if(bufferR[1]=='w')
+      {
+        printf("REPERTORY++++++\n");
+        if(nbOfClient == 1){
+          strcpy(bufferS,"vous êtes seul sur ce tchat\n");
+          printf("vous êtes seul sur ce tchat\n");
+          exit_if((write(clientTab[currentClientId].pid, bufferS, strlen(bufferS) + 1) == -1), "write");}
+        else{
+          for(int i = 0 ; i<nbOfClient ; i++){
+            if( currentClientId != i){
+              printf("Il y a %s\n",clientTab[i].name);
+              strcpy(bufferS,"-");
+              strcat(bufferS,clientTab[i].name);
+              strcat(bufferS,"\n");
+              sleep(1);
+              exit_if((write(clientTab[currentClientId].pid, bufferS, strlen(bufferS)+1) == -1),"write");}}}
+      }
 
+      //-------------CONSIGNE MESSAGE------------------
+      else if(bufferR[1]=='m')
+      {
+        printf("MESSAGE++++++\n");
+        strcat(bufferS,clientTab[currentClientId].name);
+        strcat(bufferS,": ");
+        strcat(bufferS,dataR2);
+        for(int i = 0 ; i<nbOfClient ; i++){
+          if( currentClientId != i){
+            printf("j'envoie à %s\n",clientTab[i].name);
+            exit_if((write(clientTab[i].pid, bufferS, strlen(bufferS)+1) == -1),"write");}}
+      }
 
-	      printf("le fd est %s et le nom est %s \n",clientTab[nbOfClient].file,clientTab[nbOfClient].name);
+      //-------------CONSIGNE QUIT------------------
+      else if(bufferR[1] == 'q')
+      {
+        exit_if((write(clientTab[currentClientId].pid, "/c", strlen("/c")+1) == -1),"write");
+        printf("CLOSING CLIENT++++++\n");
+        for(int i = currentClientId;i<(nbOfClient-1);i++){
+          clientTab[i]=clientTab[i+1];}
+        nbOfClient--;
+      }
 
-	      clientTab[nbOfClient].pid = open(clientTab[nbOfClient].file,O_WRONLY);
-	      exit_if((clientTab[nbOfClient].pid == -1), "open");
-	      
-	      strcpy(bufferS,"bienvenue ");
-	      strcat(bufferS,clientTab[nbOfClient].name);
+      //-------------CONSIGNE ERREUR------------------
+      else{ printf("++++++ERROR UNKNOW CONS+++++\n"); }
 
-	      exit_if((write(clientTab[nbOfClient].pid, bufferS, strlen(bufferS) + 1) == -1), "write");
-	      nbOfClient++;
-	    }
-
-
-	  else if(bufferR[1]=='w')
-	    {
-	      printf("de répertoire\r\n");
-	    }
-
-
-
-
-	  else if(bufferR[1]=='m')
-	    {
-	      printf("de message\r\n");
-
-
-	      strcpy(bufferS,dataR2);
-
-	      for(int i = 0 ; i<nbOfClient ; i++){
-		if( strcmp(clientTab[i].file, dataR1) != 0)
-		  {
-		    printf("j'envoie à %s",clientTab[i].name);
-		    exit_if((write(clientTab[i].pid, bufferS, strlen(bufferS)+1) == -1),"write");
-		  }
-	      }
-
-
-	    }
-
-
-
-	  else if(bufferR[1] == 'q')
-	    {
-	      printf("de fermeture client\r\n");
-	    }
-
-
-
-	  else{
-	    printf("erreur consigne non standarde");}
-
-	}
-
-      else
-	    printf("erreur reception non standarde");
     }
+    else
+      printf("++++++ERROR UNKNOW RECV+++++\n");
+  }
   return 0;
 }
-
-
-
-//  dans le while 1
-      // exit_if((close(fd1) == -1),"close");
-      //
-      // // Now open in write mode and write
-      // // string taken from user.
-      // fd1 = open(myfifo,O_WRONLY);
-      // exit_if((fd1 == -1), "open");
-      //
-      // exit_if((fgets(str2, 80, stdin) == NULL),"fgets");
-      // exit_if((write(fd1, str2, strlen(str2)+1) == -1),"write");
-      // exit_if((close(fd1) == -1),"close");
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// #include <fcntl.h>
-// #include <stdio.h>
-// #include <stdlib.h>
-// #include <unistd.h>
-//
-// #include "utils.h"
-//
-//
-// #define TAILLE_MESSAGE	256
-// #define PATH						"/tmp/chat/"
-//
-// int main(void)
-// {
-// 	int sortieTube;
-//
-// 	char nomTube[] = (PATH, "0");
-//
-// 	char chaineALire[TAILLE_MESSAGE];
-//
-// 	sortieTube = open (nomTube, O_RDONLY));
-// 	exit_if((sortieTube == -1), "open");
-//
-//
-// 	while (1) {
-// 		read(sortieTube, chaineALire, TAILLE_MESSAGE);
-//     printf("Serveur : %s", chaineALire);
-// 	}
-//
-// 	return EXIT_SUCCESS;
-// }

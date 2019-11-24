@@ -7,157 +7,143 @@
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
-
 #include "utils.h"
 
-#define TAILLE_MESSAGE	256
-#define PATH	"/tmp/chat/"
+int  fileDescServ;
+int  fileDescClie;
+char pathClientFile[12]  = "/tmp/chat/";
+char pathClientPipe[30];
+char pathServerPipe[12] = "/tmp/chat/0";
 
-int fd;
-char myfifo[50];
 
-int GetServ(void) {
-  int File_Desc = open("/tmp/chat/0", O_WRONLY);
-  if (File_Desc == -1) {
-      switch (fork()) {
-      case -1 :
-	perror("fork");
-	return EXIT_FAILURE;
-	break;
-
-      case 0:
-	exit_if(execl("./serveur",NULL)==-1,"exec");
-	File_Desc = open("/tmp/chat/0", O_WRONLY);
-	exit_if(File_Desc == -1, "open File_Desc");
-	return File_Desc;
-	break;
-      }
-    }
+void handle_sigint(int sig) {
+  if(sig == 2) {
+    printf("OK, merci et au revoir!\n");
+    char buff2quit[30];
+    strcpy(buff2quit,"/q;");
+    strcat(buff2quit,pathClientPipe);
+    exit_if((write(fileDescServ, buff2quit, strlen(buff2quit)+1) == -1), "write");
+  }
   else {
-      return File_Desc;
+  printf("Vous etes déconnecte(e) !\n");
+  printf("Caught signal %d\n", sig);
+  close(fileDescClie);
+  remove( pathClientFile );
+  exit(EXIT_SUCCESS);
   }
 }
 
 
-void handle_sigint(int sig)
-{
-    printf("Caught signal %d\n", sig);
-    close(fd);
-    remove(myfifo);
-    exit(0);
-}
+int main() {
+  signal(SIGINT, handle_sigint);
 
-int main(int argc, char *argv[]) {
+  int pid = getpid();
+  char strPid[7] = {0};
+  sprintf(strPid, "%d", pid);
 
-    int pid = getpid();
-    int filDescServ;
-    char strPid[7] = {0};        // à mieux faire
-    sprintf(strPid, "%d", pid);
+  strcpy(pathClientPipe, pathClientFile);
+  strcat(pathClientPipe, strPid);
 
+//-------------------------LANCEMENT DU SERVEUR--------------------------
+  fileDescServ = open(pathServerPipe, O_WRONLY);
+  if (fileDescServ < 0)
+  {
+    if (fork() == 0) {
+        int fd_null = open("/dev/null", O_RDONLY);
+        exit_if(fd_null == -1," open");
+        dup2(fd_null, STDIN_FILENO);
+        dup2(fd_null, STDOUT_FILENO);
+        dup2(fd_null, STDERR_FILENO);
+        exit_if(execl("./serveur","serveur", (char*)NULL) !=0, "ERROR Client could not open server");}
+    printf("Le serveur est deja lance\n");
 
-    strcpy(myfifo, PATH);
-    strcat(myfifo, strPid);
-    printf("je suis le client : %s\n", myfifo);
-
-    signal(SIGINT, handle_sigint);
-
-
-    // Creating the named file(FIFO)
-    // mkfifo(<pathname>, <permission>)
-    exit_if((mkfifo(myfifo, 0777) == -1), "mkfifo");
-    printf("mkfifo %s\n", myfifo);
-
-    
-    filDescServ = GetServ();
-
-    //  int filDescServ = open("/tmp/chat/0", O_WRONLY);
-    //  exit_if((filDescServ == -1), "open fileDescServ");
+    while ((fileDescServ = open(pathServerPipe, O_WRONLY | O_NONBLOCK)) == -1){
+            if (errno == ENOENT || errno == ENXIO){}
+            else{ exit_if(fileDescServ < 0, "ERROR launching server"); }
+            usleep(10);}
+  }
 
 
-  filDescServ = open("/tmp/chat/0", O_WRONLY);
-  if (filDescServ == -1) {
-      switch (fork()) {
-      case -1 :
-	perror("fork");
-	break;
+
+
+  //--------------------LANCEMENT PIPE ET INTITULE----------------------
+  exit_if((mkfifo(pathClientPipe, 0777) == -1), "mkfifo");
+  printf("Bienvenue sur ce tchat\n");
+  printf("Les commandes disponibles sont:\n");
+  printf("/w pour savoir qui est connecte\n");
+  printf("/q pour se deconnecter\n");
+
+
+
+  //------------------------------ID CLIENT-----------------------------
+  char nameClient[16];
+  printf("Entrer votre nom d'utilisateur:");
+  exit_if((fgets(nameClient, 16, stdin) == NULL),"fgets");
+  char idClient[40]= "/i";
+  strcat(idClient,";");
+  strcat(idClient,pathClientPipe);
+  strcat(idClient,";");
+  strcat(idClient,nameClient);
+  exit_if((write(fileDescServ, idClient, strlen(idClient)+1) == -1), "write");   //envoit l'identité
+
+  //------------------------------OPEN SERV----------------------------
+   fileDescClie = open(pathClientPipe, O_RDONLY);
+   exit_if((fileDescClie == -1), "open fd");
+
+
+
+  char buffOfText[80];
+  char buff2Send[100];
+  char buffRecv[100];
+
+  int pid_t = fork();
+
+  while (1)
+  {
+    for(int i =0 ; i<100; i++) { buff2Send[i]=0;  buffRecv[i]=0;}      //RESET BUFFER
+    switch(pid_t)
+    {
+      case -1:
+        perror("fork");
+        exit(EXIT_FAILURE);
+        break;
 
       case 0:
-	exit_if(execl("./serveur",NULL)==-1,"exec");
-	filDescServ = open("/tmp/chat/0", O_WRONLY);
+        exit_if((fgets(buffOfText, 80, stdin) == NULL),"fgets");
+        if(buffOfText[0] == '/')    //CMD DETECTPR
+        {
+          //CMD REPERTORY
+          if(buffOfText[1] == 'w')
+          {
+            printf("les utilisateurs sont :\n");
+            strcpy(buff2Send,"/w;");
+            strcat(buff2Send,pathClientPipe);
+          }
 
-	break;
-      }
+          //CMD QUIT
+          else if(buffOfText[1] == 'q') { handle_sigint(SIGINT);}
+
+          //CMD UNKNOW
+          else {printf("commande inconnue\n");}
+        }
+        else                        //MESSAGE STANDARD
+        {
+          strcpy(buff2Send,"/m;");
+          strcat(buff2Send,pathClientPipe);
+          strcat(buff2Send,";");
+          strcat(buff2Send,buffOfText);
+        }
+        exit_if((write(fileDescServ, buff2Send, strlen(buff2Send)+1) == -1), "write");
+        break;
+
+      default:
+        exit_if(((read(fileDescClie, buffRecv, sizeof(buffRecv)) == -1) && (errno != EAGAIN)),"read");
+        if(strcmp(buffRecv,"/c")==0)
+          handle_sigint(SIGTERM);
+        else
+          printf(">>>%s", buffRecv);
+        break;
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//---------------------ID CLIENT-----------------------
-    char nameClient[15];
-    printf("Entrez votre nom d'utilisateur:");
-    exit_if((fgets(nameClient, 15, stdin) == NULL),"fgets");
-
-    char idClient[30]= "/i";
-    strcat(idClient,";");
-    strcat(idClient,myfifo);
-    strcat(idClient,";");
-    strcat(idClient,nameClient);
-    exit_if((write(filDescServ, idClient, strlen(idClient)+1) == -1), "write");   //envoit l'identité
-//-------------------ID CLIENT-----------------------
-
-   fd = open(myfifo, O_RDONLY);
-    exit_if((fd == -1), "open fd");
-
-
-    char str_Recept[80], str_Envoi[80];
-
-    char buffOfText[80];
-    char buff2Send[100];
-
-
-    int pid_t = fork();
-
-    while (1)
-      {
-	switch(pid_t)
-	  {
-	  case -1:
-	    perror("fork");
-	    exit(EXIT_FAILURE);
-	    break;
-
-	  case 0:
-	    printf("Ecris ton message : \n");
-	    exit_if((fgets(buffOfText, 80, stdin) == NULL),"fgets");
- 
-	    strcpy(buff2Send,"/m;");
-	    strcat(buff2Send,myfifo);
-	    strcat(buff2Send,";");
-	    strcat(buff2Send,buffOfText);
-
-	    exit_if((write(filDescServ, buff2Send, strlen(buff2Send)+1) == -1), "write");
-	    break;
-
-	  default:
-
-	    exit_if(((read(fd, str_Recept, sizeof(str_Recept)) == -1) && (errno != EAGAIN)),"read");
-	  
-	    printf("Le serveur a envoyé : %s\n", str_Recept);
-	    break;
-	  }
-	str_Recept[0] = '\0';
-      }
-    return 0;
+  }
+  return 0;
 }
